@@ -1,0 +1,6 @@
+# Object files
+*.o
+
+# Executable files
+*.out
+dynamic-power-manager
