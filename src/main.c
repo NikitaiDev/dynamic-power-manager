@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <libusb-1.0/libusb.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef enum {
     MAX_POWER_SAVING,
@@ -27,7 +29,49 @@ void set_power_profile(power_profile_t profile) {
     }
 }
 
-void print_device_descriptors() {
+// Function to execute lsusb and get the device description by VID and PID
+void get_lsusb_description(unsigned short vid, unsigned short pid) {
+    char command[128];
+    snprintf(command, sizeof(command), "lsusb -d %04x:%04x", vid, pid);
+    
+    FILE *fp = popen(command, "r");
+    if (fp == NULL) {
+        printf("Failed to run lsusb command.\n");
+        return;
+    }
+    
+    char result[256];
+    if (fgets(result, sizeof(result), fp) != NULL) {
+        // Removing Bus and Device information from the description
+        char *desc_start = strstr(result, "ID ");
+        if (desc_start) {
+            desc_start += 3;  // Move past "ID "
+            while (*desc_start != '\0' && *desc_start != ' ') desc_start++;  // Skip VID:PID
+            while (*desc_start == ' ') desc_start++;  // Skip whitespace
+            printf("  Description:  %s", desc_start);
+        }
+    } else {
+        printf("  Description: Not available\n");
+    }
+
+    pclose(fp);
+}
+
+// Function to disable a USB device (detach kernel driver or reset device)
+void disable_device(libusb_device_handle *handle) {
+    if (libusb_kernel_driver_active(handle, 0)) {
+        if (libusb_detach_kernel_driver(handle, 0) == 0) {
+            printf("  Device disabled by detaching kernel driver.\n");
+        } else {
+            printf("  Failed to detach kernel driver.\n");
+        }
+    } else {
+        printf("  Device reset.\n");
+        libusb_reset_device(handle);
+    }
+}
+
+void print_device_descriptors_and_disable_mass_storage() {
     libusb_context *ctx = NULL;
     libusb_device **devs;
     ssize_t cnt;
@@ -53,8 +97,10 @@ void print_device_descriptors() {
             continue;
         }
 
-        printf("Device %d:\n", i);
-        printf("  VID: %04x, PID: %04x\n", desc.idVendor, desc.idProduct);
+        printf("Device %d:  VID: %04x, PID: %04x\n", i, desc.idVendor, desc.idProduct);
+
+        // Get lsusb description
+        get_lsusb_description(desc.idVendor, desc.idProduct);
 
         int class_identified = 0;  // Flag to check if class info has been identified
 
@@ -68,122 +114,106 @@ void print_device_descriptors() {
                     if (!class_identified) {
                         printf("  Interface Class: %02x", interface_desc->bInterfaceClass);
 
-                        switch (interface_desc->bInterfaceClass) {
-                            case 0x01:
-                                printf(" - Audio\n");
-                                class_identified = 1;
-                                break;
-                            case 0x02:
-                                printf(" - Communication and CDC Control\n");
-                                class_identified = 1;
-                                break;
-                            case 0x03:
-                                switch (interface_desc->bInterfaceSubClass) {
-                                    case 0x01:
-                                        printf(" - HID Keyboard\n");
-                                        break;
-                                    case 0x02:
-                                        printf(" - HID Mouse\n");
-                                        break;
-                                    default:
-                                        printf(" - HID Device\n");
-                                        break;
-                                }
-                                class_identified = 1;
-                                break;
-                            case 0x05:
-                                printf(" - Physical Interface Device\n");
-                                class_identified = 1;
-                                break;
-                            case 0x06:
-                                printf(" - Image\n");
-                                class_identified = 1;
-                                break;
-                            case 0x07:
-                                printf(" - Printer\n");
-                                class_identified = 1;
-                                break;
-                            case 0x08:
-                                printf(" - Mass Storage\n");
-                                class_identified = 1;
-                                break;
-                            case 0x09:
-                                printf(" - Hub\n");
-                                class_identified = 1;
-                                break;
-                            case 0x0a:
-                                printf(" - CDC Data\n");
-                                class_identified = 1;
-                                break;
-                            case 0x0b:
-                                printf(" - Smart Card\n");
-                                class_identified = 1;
-                                break;
-                            case 0x0d:
-                                printf(" - Content Security\n");
-                                class_identified = 1;
-                                break;
-                            case 0x0e:
-                                printf(" - Video\n");
-                                class_identified = 1;
-                                break;
-                            case 0x0f:
-                                printf(" - Personal Healthcare\n");
-                                class_identified = 1;
-                                break;
-                            case 0x10:
-                                printf(" - Audio/Video Devices\n");
-                                class_identified = 1;
-                                break;
-                            case 0x11:
-                                printf(" - Billboard Device\n");
-                                class_identified = 1;
-                                break;
-                            case 0x12:
-                                printf(" - USB Type-C Bridge Class\n");
-                                class_identified = 1;
-                                break;
-                            case 0x13:
-                                printf(" - USB Bulk Display Protocol Device Class\n");
-                                class_identified = 1;
-                                break;
-                            case 0x14:
-                                printf(" - MCTP over USB Protocol Endpoint Device Class\n");
-                                class_identified = 1;
-                                break;
-                            case 0x3c:
-                                printf(" - I3C Device Class\n");
-                                class_identified = 1;
-                                break;
-                            case 0xdc:
-                                printf(" - Diagnostic Device\n");
-                                class_identified = 1;
-                                break;
-                            case 0xe0:
-                                printf(" - Wireless Controller\n");
-                                class_identified = 1;
-                                break;
-                            case 0xef:
-                                printf(" - Miscellaneous\n");
-                                class_identified = 1;
-                                break;
-                            case 0xfe:
-                                printf(" - Application Specific\n");
-                                class_identified = 1;
-                                break;
-                            case 0xff:
-                                printf(" - Vendor Specific\n");
-                                class_identified = 1;
-                                break;
-                            default:
-                                printf(" - Unknown Class\n");
-                                break;
+                        if (interface_desc->bInterfaceClass == 0x08) {
+                            printf(" - Mass Storage\n");
+
+                            // Disable the device if it's Mass Storage
+                            libusb_device_handle *handle;
+                            if (libusb_open(dev, &handle) == 0) {
+                                disable_device(handle);
+                                libusb_close(handle);
+                            } else {
+                                printf("  Failed to open device for disabling.\n");
+                            }
+                        } else {
+                            switch (interface_desc->bInterfaceClass) {
+                                case 0x01:
+                                    printf(" - Audio\n");
+                                    break;
+                                case 0x02:
+                                    printf(" - Communication and CDC Control\n");
+                                    break;
+                                case 0x03:
+                                    switch (interface_desc->bInterfaceSubClass) {
+                                        case 0x01:
+                                            printf(" - HID Keyboard\n");
+                                            break;
+                                        case 0x02:
+                                            printf(" - HID Mouse\n");
+                                            break;
+                                        default:
+                                            printf(" - HID Device\n");
+                                            break;
+                                    }
+                                    break;
+                                case 0x05:
+                                    printf(" - Physical Interface Device\n");
+                                    break;
+                                case 0x06:
+                                    printf(" - Image\n");
+                                    break;
+                                case 0x07:
+                                    printf(" - Printer\n");
+                                    break;
+                                case 0x09:
+                                    printf(" - Hub\n");
+                                    break;
+                                case 0x0a:
+                                    printf(" - CDC Data\n");
+                                    break;
+                                case 0x0b:
+                                    printf(" - Smart Card\n");
+                                    break;
+                                case 0x0d:
+                                    printf(" - Content Security\n");
+                                    break;
+                                case 0x0e:
+                                    printf(" - Video\n");
+                                    break;
+                                case 0x0f:
+                                    printf(" - Personal Healthcare\n");
+                                    break;
+                                case 0x10:
+                                    printf(" - Audio/Video Devices\n");
+                                    break;
+                                case 0x11:
+                                    printf(" - Billboard Device\n");
+                                    break;
+                                case 0x12:
+                                    printf(" - USB Type-C Bridge Class\n");
+                                    break;
+                                case 0x13:
+                                    printf(" - USB Bulk Display Protocol Device Class\n");
+                                    break;
+                                case 0x14:
+                                    printf(" - MCTP over USB Protocol Endpoint Device Class\n");
+                                    break;
+                                case 0x3c:
+                                    printf(" - I3C Device Class\n");
+                                    break;
+                                case 0xdc:
+                                    printf(" - Diagnostic Device\n");
+                                    break;
+                                case 0xe0:
+                                    printf(" - Wireless Controller\n");
+                                    break;
+                                case 0xef:
+                                    printf(" - Miscellaneous\n");
+                                    break;
+                                case 0xfe:
+                                    printf(" - Application Specific\n");
+                                    break;
+                                case 0xff:
+                                    printf(" - Vendor Specific\n");
+                                    break;
+                                default:
+                                    printf(" - Unknown Class\n");
+                                    break;
+                            }
                         }
 
-                        if (interface_desc->bInterfaceSubClass != 0) {
-                            printf(", SubClass: %02x", interface_desc->bInterfaceSubClass);
-                        }
                         printf("\n");
+                        class_identified = 1;
                     }
                 }
             }
@@ -202,7 +232,7 @@ int main() {
     printf("Starting dynamic power manager\n");
 
     set_power_profile(MAX_POWER_SAVING);
-    print_device_descriptors();
+    print_device_descriptors_and_disable_mass_storage();
 
     while (1) {
         switch (current_profile) {
