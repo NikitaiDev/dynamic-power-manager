@@ -12,6 +12,50 @@ typedef enum {
 
 power_profile_t current_profile = BALANCED;
 
+// Structure to hold device class configuration
+typedef struct {
+    uint8_t bInterfaceClass;
+    int disable; // 1 - Disable, 0 - Do not disable
+} device_class_config_t;
+
+// Device class configurations
+device_class_config_t class_configs[] = {
+    {0x08, 1},  // Mass Storage - Disable
+    {0x03, 0},  // HID - Do not disable
+    {0x09, 0},  // Hub - Do not disable
+    {0x01, 0},  // Audio - Do not disable
+    {0x02, 0},  // Communication and CDC Control - Do not disable
+    {0x05, 0},  // Physical Interface Device - Do not disable
+    {0x06, 0},  // Image - Do not disable
+    {0x07, 0},  // Printer - Do not disable
+    {0x0a, 0},  // CDC Data - Do not disable
+    {0x0b, 0},  // Smart Card - Do not disable
+    {0x0d, 0},  // Content Security - Do not disable
+    {0x0e, 0},  // Video - Do not disable
+    {0x0f, 0},  // Personal Healthcare - Do not disable
+    {0x10, 0},  // Audio/Video Devices - Do not disable
+    {0x11, 0},  // Billboard Device - Do not disable
+    {0x12, 0},  // USB Type-C Bridge Class - Do not disable
+    {0x13, 0},  // USB Bulk Display Protocol Device Class - Do not disable
+    {0x14, 0},  // MCTP over USB Protocol Endpoint Device Class - Do not disable
+    {0x3c, 0},  // I3C Device Class - Do not disable
+    {0xdc, 0},  // Diagnostic Device - Do not disable
+    {0xe0, 0},  // Wireless Controller - Do not disable
+    {0xef, 0},  // Miscellaneous - Do not disable
+    {0xfe, 0},  // Application Specific - Do not disable
+    {0xff, 0}   // Vendor Specific - Do not disable
+};
+
+// Function to find if a class should be disabled
+int should_disable_class(uint8_t bInterfaceClass) {
+    for (long unsigned int i = 0; i < sizeof(class_configs) / sizeof(class_configs[0]); i++) {
+        if (class_configs[i].bInterfaceClass == bInterfaceClass) {
+            return class_configs[i].disable;
+        }
+    }
+    return 0;  // Default to not disabling if class not found
+}
+
 void set_power_profile(power_profile_t profile) {
     current_profile = profile;
     switch (profile) {
@@ -114,8 +158,9 @@ void print_device_descriptors_and_disable_mass_storage() {
                     if (!class_identified) {
                         printf("  Interface Class: %02x", interface_desc->bInterfaceClass);
 
-                        if (interface_desc->bInterfaceClass == 0x08) {
-                            printf(" - Mass Storage\n");
+                        // Check if the class should be disabled
+                        if (should_disable_class(interface_desc->bInterfaceClass)) {
+                            printf(" - Mass Storage (Disabling)\n");
 
                             // Disable the device if it's Mass Storage
                             libusb_device_handle *handle;
