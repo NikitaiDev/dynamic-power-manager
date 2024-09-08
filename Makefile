@@ -1,21 +1,24 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic
-LDFLAGS = -lusb-1.0
+CFLAGS = -Wall -Wextra -pedantic -Iinclude
+LDFLAGS = -lusb-1.0 `pkg-config --cflags --libs gtk+-3.0 appindicator3-0.1` 
 TARGET = dynamic-power-manager
 PREFIX = /usr/local
 
-# Default rule to build the project
-$(TARGET): src/main.c
-	$(CC) $(CFLAGS) -o $(TARGET) src/main.c $(LDFLAGS) 
+SRCS = src/*
+OBJS = $(SRCS:.c=.o)
 
-# Install the binary
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Установка программы
 install: $(TARGET)
 	install -m 0755 $(TARGET) $(PREFIX)/bin/$(TARGET)
 
-# Uninstall the binary
 uninstall:
 	rm -f $(PREFIX)/bin/$(TARGET)
 
-# Clean rule to remove compiled files
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(OBJS)
