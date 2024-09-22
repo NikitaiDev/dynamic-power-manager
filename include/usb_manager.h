@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define NUM_DEVICES 24  
+
 typedef enum {
     MAX_POWER_SAVING,
     BALANCED,

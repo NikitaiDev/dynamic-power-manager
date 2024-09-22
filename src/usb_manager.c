@@ -2,7 +2,7 @@
 
 power_profile_t current_profile = BALANCED;
 
-device_class_config_t class_configs[] = {
+device_class_config_t class_configs[NUM_DEVICES] = {
     {0x08, 1},  // Mass Storage - Disable
     {0x03, 0},  // HID - Do not disable
     {0x09, 0},  // Hub - Do not disable
