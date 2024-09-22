@@ -11,7 +11,7 @@ This project implements a dynamic power manager that monitors the activity of pe
 ## How to Install
 1. Clone the repository:
     ```bash
-    git clone https://github.com/your-username/dynamic-power-manager.git
+    git clone https://github.com/NikitaiDev/dynamic-power-manager.git
     cd dynamic-power-manager
     ```
 
